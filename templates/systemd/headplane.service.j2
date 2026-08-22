@@ -29,6 +29,7 @@ ExecStartPre={{ devture_systemd_docker_base_host_command_docker }} create \
       --user={{ headplane_uid }}:{{ headplane_gid }} \
       --cap-drop=ALL \
       --read-only \
+      --tmpfs=/tmp:rw,noexec,nosuid \
       --network={{ headplane_container_network }} \
       {% if headplane_container_http_bind_port %}
       -p {{ headplane_container_http_bind_port }}:{{ headplane_container_http_port }} \
