@@ -8,6 +8,26 @@
   become: true
   gather_facts: false
   tasks:
+    - name: Read Headplane environment file
+      ansible.builtin.slurp:
+        src: /headplane/env
+      register: headplane_environment_file
+
+    - name: Assert Headscale API key is rendered into the Headplane environment file
+      ansible.builtin.assert:
+        that:
+          - "'HEADPLANE_HEADSCALE__API_KEY=molecule-headscale-api-key' in (headplane_environment_file.content | b64decode)"
+
+    - name: Read Headplane configuration file
+      ansible.builtin.slurp:
+        src: /headplane/config.yaml
+      register: headplane_configuration_file
+
+    - name: Assert obsolete Headplane agent pre-auth key is not rendered
+      ansible.builtin.assert:
+        that:
+          - "'pre_authkey' not in (headplane_configuration_file.content | b64decode)"
+
     - name: Wait for Headplane service to become active (up to 180s)
       ansible.builtin.systemd:
         name: headplane.service

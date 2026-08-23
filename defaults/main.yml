@@ -68,8 +68,9 @@ headplane_headscale_config_path_mount_options: readonly
 # Controls the `integration.agent.enabled` configuration value
 headplane_config_integration_agent_enabled: false
 
-# Controls the `integration.agent.pre_authkey` configuration value
-headplane_config_integration_agent_pre_authkey: ""
+# Controls the `headscale.api_key` configuration value through the protected environment file.
+# This is required when `headplane_config_integration_agent_enabled` is enabled.
+headplane_config_headscale_api_key: ""
 
 # Controls the `integration.docker.enabled` configuration value
 # and the mounting of `headplane_config_integration_docker_endpoint` into the container

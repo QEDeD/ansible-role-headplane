@@ -73,10 +73,6 @@ integration:
     # it connects.
     enabled: {{ headplane_config_integration_agent_enabled | to_json }}
 
-    # To connect to your Tailnet, you need to generate a pre-auth key
-    # This can be done via the web UI or through the `headscale` CLI.
-    pre_authkey: {{ headplane_config_integration_agent_pre_authkey | to_json }}
-
     # Optionally change the name of the agent in the Tailnet.
     # host_name: "headplane-agent"
 
