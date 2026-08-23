@@ -26,3 +26,8 @@
       vars:
         docker_daemon_options:
           storage-driver: vfs
+
+    - name: Ensure additional Headplane test network exists
+      community.docker.docker_network:
+        name: headplane-control
+        driver: bridge

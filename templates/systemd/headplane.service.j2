@@ -30,7 +30,7 @@ ExecStartPre={{ devture_systemd_docker_base_host_command_docker }} create \
       --cap-drop=ALL \
       --read-only \
       --tmpfs=/tmp:rw,noexec,nosuid \
-      --network={{ headplane_container_network }} \
+      --network={% if headplane_container_default_gateway_network == headplane_container_network %}name={{ headplane_container_network }},gw-priority=1{% else %}{{ headplane_container_network }}{% endif %} \
       {% if headplane_container_http_bind_port %}
       -p {{ headplane_container_http_bind_port }}:{{ headplane_container_http_port }} \
       {% endif %}
@@ -56,7 +56,7 @@ ExecStartPre={{ devture_systemd_docker_base_host_command_docker }} create \
       {{ headplane_container_image }}
 
 {% for network in headplane_container_additional_networks %}
-ExecStartPre={{ devture_systemd_docker_base_host_command_docker }} network connect {{ network }} {{ headplane_identifier }}
+ExecStartPre={{ devture_systemd_docker_base_host_command_docker }} network connect{% if headplane_container_default_gateway_network == network %} --gw-priority=1{% endif %} {{ network }} {{ headplane_identifier }}
 {% endfor %}
 
 ExecStart={{ devture_systemd_docker_base_host_command_docker }} start --attach {{ headplane_identifier }}

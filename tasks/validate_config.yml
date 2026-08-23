@@ -44,6 +44,48 @@
     - headplane_config_integration_agent_enabled | bool
     - headplane_config_headscale_api_key | string | length == 0
 
+- name: Fail if Headplane default-gateway network is not attached
+  ansible.builtin.fail:
+    msg: >-
+      headplane_container_default_gateway_network must be empty,
+      equal to headplane_container_network, or name an entry in
+      headplane_container_additional_networks.
+  when:
+    - headplane_container_default_gateway_network | length > 0
+    - headplane_container_default_gateway_network not in ([headplane_container_network] + headplane_container_additional_networks)
+
+- name: Check Docker gateway-priority support
+  when: headplane_container_default_gateway_network | length > 0
+  block:
+    - name: Retrieve Docker server API version
+      ansible.builtin.command:
+        cmd: >-
+          {{ devture_systemd_docker_base_host_command_docker }} version
+          --format {% raw %}'{{.Server.APIVersion}}'{% endraw %}
+      register: headplane_docker_server_api_version_result
+      changed_when: false
+      failed_when: false
+
+    - name: Check whether Docker network connect supports gateway priority
+      ansible.builtin.command:
+        cmd: "{{ devture_systemd_docker_base_host_command_docker }} network connect --help"
+      register: headplane_docker_network_connect_help_result
+      changed_when: false
+      failed_when: false
+
+    - name: Fail if Docker does not support gateway priority
+      ansible.builtin.fail:
+        msg: >-
+          headplane_container_default_gateway_network requires Docker Engine 28 or newer
+          (server API 1.48 or newer) and a Docker CLI with
+          docker network connect --gw-priority support.
+      when: >-
+        headplane_docker_server_api_version_result.rc != 0
+        or headplane_docker_server_api_version_result.stdout | trim | length == 0
+        or (headplane_docker_server_api_version_result.stdout | trim) is version('1.48', '<')
+        or headplane_docker_network_connect_help_result.rc != 0
+        or '--gw-priority' not in headplane_docker_network_connect_help_result.stdout
+
 - name: Fail if Headplane architecture is not supported
   ansible.builtin.fail:
     msg: >-

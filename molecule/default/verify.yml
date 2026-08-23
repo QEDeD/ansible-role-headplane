@@ -52,6 +52,21 @@
         that:
           - headplane_container_info.container.HostConfig.ReadonlyRootfs
           - headplane_container_info.container.HostConfig.Tmpfs["/tmp"] == "rw,noexec,nosuid"
+          - headplane_container_info.container.HostConfig.CapDrop == ["ALL"]
+
+    - name: Assert Headplane container network configuration
+      ansible.builtin.assert:
+        that:
+          - "'headplane' in headplane_container_info.container.NetworkSettings.Networks"
+          - "'headplane-control' in headplane_container_info.container.NetworkSettings.Networks"
+          - headplane_container_info.container.NetworkSettings.Networks['headplane'].GwPriority == 0
+          - headplane_container_info.container.NetworkSettings.Networks['headplane-control'].GwPriority == 1
+          - >-
+            headplane_container_info.container.NetworkSettings.Networks
+            | dict2items
+            | selectattr('value.GwPriority', 'equalto', 1)
+            | list
+            | length == 1
 
     - name: Retrieve Headplane service log for debugging
       when: headplane_debug_service_enabled | bool

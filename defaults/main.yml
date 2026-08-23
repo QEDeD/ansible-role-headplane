@@ -102,6 +102,15 @@ headplane_container_additional_networks_default: []
 headplane_container_additional_networks_auto: []
 headplane_container_additional_networks_custom: []
 
+# The attached container network which should provide Headplane's default gateway.
+#
+# Leave empty to preserve Docker's default gateway-selection behavior.
+# When set, this must be either headplane_container_network or an entry in
+# headplane_container_additional_networks.
+#
+# This requires Docker Engine 28 or newer (--gw-priority support).
+headplane_container_default_gateway_network: ""
+
 # List of systemd services that the Headplane systemd service depends on
 headplane_systemd_required_services_list: "{{ (headplane_systemd_required_services_list_default + headplane_systemd_required_services_list_auto + headplane_systemd_required_services_list_custom) | unique }}"
 headplane_systemd_required_services_list_default: "{{ [devture_systemd_docker_base_docker_service_name] if devture_systemd_docker_base_docker_service_name else [] }}"

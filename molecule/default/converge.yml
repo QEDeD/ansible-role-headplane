@@ -58,6 +58,25 @@
               - "'headplane_config_headscale_api_key' in ansible_failed_result.msg"
               - "'when `headplane_config_integration_agent_enabled` is enabled' in ansible_failed_result.msg"
 
+    - name: Verify an unattached Headplane default-gateway network is rejected
+      block:
+        - name: Validate configuration with an unattached default-gateway network
+          ansible.builtin.include_role:
+            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
+            tasks_from: validate_config
+          vars:
+            headplane_container_default_gateway_network: unattached-network
+
+        - name: Fail if an unattached default-gateway network was accepted
+          ansible.builtin.fail:
+            msg: The unattached Headplane default-gateway network was unexpectedly accepted.
+      rescue:
+        - name: Assert the unattached default-gateway network validation message
+          ansible.builtin.assert:
+            that:
+              - "'headplane_container_default_gateway_network' in ansible_failed_result.msg"
+              - "'headplane_container_additional_networks' in ansible_failed_result.msg"
+
     - name: Include Headplane role for Molecule tests
       ansible.builtin.include_role:
         name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
@@ -65,6 +84,50 @@
       vars:
         headplane_config_integration_agent_enabled: true
         headplane_config_headscale_api_key: molecule-headscale-api-key
+        headplane_container_additional_networks_custom:
+          - headplane-control
+        headplane_container_default_gateway_network: headplane-control
+
+    - name: Render Headplane service with default gateway selection disabled
+      ansible.builtin.set_fact:
+        headplane_service_default_gateway_disabled: >-
+          {{ lookup('template', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') + '/templates/systemd/headplane.service.j2') }}
+      vars:
+        headplane_container_default_gateway_network: ""
+
+    - name: Assert default gateway selection preserves existing rendering
+      ansible.builtin.assert:
+        that:
+          - "'--network=' + headplane_container_network in headplane_service_default_gateway_disabled"
+          - "'gw-priority' not in headplane_service_default_gateway_disabled"
+
+    - name: Render Headplane service with the base network as the default gateway
+      ansible.builtin.set_fact:
+        headplane_service_base_default_gateway: >-
+          {{ lookup('template', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') + '/templates/systemd/headplane.service.j2') }}
+      vars:
+        headplane_container_default_gateway_network: "{{ headplane_container_network }}"
+
+    - name: Assert base network default gateway rendering
+      ansible.builtin.assert:
+        that:
+          - "'--network=name=' + headplane_container_network + ',gw-priority=1' in headplane_service_base_default_gateway"
+          - "headplane_service_base_default_gateway | regex_findall('gw-priority=1') | length == 1"
+
+    - name: Render Headplane service with an additional network as the default gateway
+      ansible.builtin.set_fact:
+        headplane_service_additional_default_gateway: >-
+          {{ lookup('template', lookup('env', 'MOLECULE_PROJECT_DIRECTORY') + '/templates/systemd/headplane.service.j2') }}
+      vars:
+        headplane_container_additional_networks_custom:
+          - headplane-control
+        headplane_container_default_gateway_network: headplane-control
+
+    - name: Assert additional network default gateway rendering
+      ansible.builtin.assert:
+        that:
+          - "'network connect --gw-priority=1 headplane-control ' + headplane_identifier in headplane_service_additional_default_gateway"
+          - "headplane_service_additional_default_gateway | regex_findall('gw-priority=1') | length == 1"
 
 - name: Ensure Headplane service is started
   hosts: all
