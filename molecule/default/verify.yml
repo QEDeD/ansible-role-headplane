@@ -42,6 +42,17 @@
         fail_msg: "headplane.service not active ({{ headplane_service.status.ActiveState }})"
         success_msg: "headplane.service is active"
 
+    - name: Retrieve Headplane container information
+      community.docker.docker_container_info:
+        name: headplane
+      register: headplane_container_info
+
+    - name: Assert Headplane container filesystem configuration
+      ansible.builtin.assert:
+        that:
+          - headplane_container_info.container.HostConfig.ReadonlyRootfs
+          - headplane_container_info.container.HostConfig.Tmpfs["/tmp"] == "rw,noexec,nosuid"
+
     - name: Retrieve Headplane service log for debugging
       when: headplane_debug_service_enabled | bool
       ansible.builtin.command:
