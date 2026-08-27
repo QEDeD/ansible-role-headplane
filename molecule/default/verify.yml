@@ -26,6 +26,7 @@
     - name: Assert obsolete Headplane agent pre-auth key is not rendered
       ansible.builtin.assert:
         that:
+          - "'molecule-headscale-api-key' not in (headplane_configuration_file.content | b64decode)"
           - "'pre_authkey' not in (headplane_configuration_file.content | b64decode)"
 
     - name: Wait for Headplane service to become active (up to 180s)

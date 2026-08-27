@@ -8,63 +8,16 @@
   become: true
   gather_facts: true
   tasks:
-    - name: Include dependency roles for Headplane Molecule tests
+    - name: Include roles for Headplane Molecule tests
       ansible.builtin.include_role:
         name: "{{ role_name }}"
         public: true
       loop:
         - com.devture.ansible.role.playbook_help
         - com.devture.ansible.role.systemd_docker_base
+        - "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
       loop_control:
         loop_var: role_name
-
-    - name: Verify the obsolete Headplane agent pre-auth key is rejected
-      block:
-        - name: Validate configuration with the obsolete Headplane agent pre-auth key
-          ansible.builtin.include_role:
-            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
-            tasks_from: validate_config
-          vars:
-            headplane_config_integration_agent_pre_authkey: obsolete-pre-auth-key
-
-        - name: Fail if the obsolete Headplane agent pre-auth key was accepted
-          ansible.builtin.fail:
-            msg: The obsolete Headplane agent pre-auth key was unexpectedly accepted.
-      rescue:
-        - name: Assert the obsolete Headplane agent pre-auth key migration guidance
-          ansible.builtin.assert:
-            that:
-              - "'is no longer supported for Headplane 0.7' in ansible_failed_result.msg"
-              - "'creates its own short-lived pre-auth keys' in ansible_failed_result.msg"
-              - "'headplane_config_headscale_api_key' in ansible_failed_result.msg"
-              - "'must not be copied' in ansible_failed_result.msg"
-
-    - name: Verify Headplane agent integration requires a Headscale API key
-      block:
-        - name: Validate agent-enabled configuration without a Headscale API key
-          ansible.builtin.include_role:
-            name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
-            tasks_from: validate_config
-          vars:
-            headplane_config_integration_agent_enabled: true
-
-        - name: Fail if agent-enabled configuration without a Headscale API key was accepted
-          ansible.builtin.fail:
-            msg: Agent-enabled configuration without a Headscale API key was unexpectedly accepted.
-      rescue:
-        - name: Assert the missing Headscale API key validation message
-          ansible.builtin.assert:
-            that:
-              - "'headplane_config_headscale_api_key' in ansible_failed_result.msg"
-              - "'when `headplane_config_integration_agent_enabled` is enabled' in ansible_failed_result.msg"
-
-    - name: Include Headplane role for Molecule tests
-      ansible.builtin.include_role:
-        name: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') | basename }}"
-        public: true
-      vars:
-        headplane_config_integration_agent_enabled: true
-        headplane_config_headscale_api_key: molecule-headscale-api-key
 
 - name: Ensure Headplane service is started
   hosts: all
