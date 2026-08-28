@@ -80,12 +80,9 @@ integration:
     # Optionally change the name of the agent in the Tailnet.
     # host_name: "headplane-agent"
 
-    # Configure different caching settings. By default, the agent will store
-    # caches in the path below for a maximum of 1 minute. If you want data
-    # to update faster, reduce the TTL, but this will increase the frequency
-    # of requests to Headscale.
-    # cache_ttl: 60
-    # cache_path: /var/lib/headplane/agent_cache.json
+    # How often to sync node information (in milliseconds).
+    # Default: 180000 (3 minutes)
+    # cache_ttl: 180000
 {% endif %}
 
 {% if headplane_config_integration_docker_enabled %}
