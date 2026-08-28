@@ -65,6 +65,9 @@ headplane_headscale_config_path: ""
 # Set `headplane_headscale_config_path_mount_options` to 'readwrite' to mount as read-write
 headplane_headscale_config_path_mount_options: readonly
 
+# Controls the `integration.agent.tailscale_netns` configuration value
+headplane_config_integration_agent_tailscale_netns: true
+
 # Controls the `integration.agent.enabled` configuration value
 headplane_config_integration_agent_enabled: false
 

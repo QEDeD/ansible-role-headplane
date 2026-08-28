@@ -19,6 +19,14 @@
       loop_control:
         loop_var: role_name
 
+    - name: Assert Tailscale netns handling can be disabled for the Headplane agent
+      ansible.builtin.assert:
+        that:
+          - not (headplane_configuration_yaml | from_yaml).integration.agent.tailscale_netns
+      vars:
+        headplane_config_integration_agent_enabled: true
+        headplane_config_integration_agent_tailscale_netns: false
+
 - name: Ensure Headplane service is started
   hosts: all
   become: true

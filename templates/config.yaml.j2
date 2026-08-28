@@ -83,6 +83,8 @@ integration:
     # How often to sync node information (in milliseconds).
     # Default: 180000 (3 minutes)
     # cache_ttl: 180000
+
+    tailscale_netns: {{ headplane_config_integration_agent_tailscale_netns | to_json }}
 {% endif %}
 
 {% if headplane_config_integration_docker_enabled %}
