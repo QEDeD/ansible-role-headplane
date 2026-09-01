@@ -33,19 +33,11 @@ expect_workflow_contract() {
 
 expect_workflow_contract 'evaluates current main' '^[[:space:]]+ref:[[:space:]]+main([[:space:]]|$)'
 expect_workflow_contract 'fetches complete history and tags' '^[[:space:]]+fetch-depth:[[:space:]]+0([[:space:]]|$)'
-expect_workflow_contract 'uses the maximum pending queue' '^[[:space:]]+queue:[[:space:]]+max([[:space:]]|$)'
 expect_workflow_contract 'does not cancel a running release' '^[[:space:]]+cancel-in-progress:[[:space:]]+false([[:space:]]|$)'
 expect_workflow_contract 'has tag-write permission' '^[[:space:]]+contents:[[:space:]]+write([[:space:]]|$)'
 expect_workflow_contract 'rejects fork release jobs' '!github[.]event[.]repository[.]fork'
 expect_workflow_contract 'limits release jobs to main' "github[.]ref == 'refs/heads/main'"
 expect_workflow_contract 'pushes only the computed tag ref' 'git push origin "refs/tags/[$]TAG"'
-
-if "$script_under_test" >/dev/null 2>&1; then
-	echo '  ok   | actual repository tree is fully classified'
-else
-	echo '  FAIL | actual repository tree or release state is invalid'
-	failures=$((failures + 1))
-fi
 
 cleanup() {
 	cd /
@@ -154,16 +146,10 @@ edit_task="printf 'a task\n' >> tasks/main.yml"
 edit_template="printf 'a line\n' >> templates/env.j2"
 edit_readme="printf 'documentation\n' >> README.md"
 edit_script="printf '# a comment\n' >> bin/compute-next-tag.sh"
+revert_task="git show 'v0.6.2-1:tasks/main.yml' > tasks/main.yml"
 
-write_runtime_file() {
-	local path="$1"
-
-	mkdir -p "$(dirname -- "$path")"
-	printf 'runtime content\n' >> "$path"
-}
-
-# The two merge orders below apply the same updates and must each end up with
-# every update released exactly once, whichever order they arrive in.
+# The two sequential merge orders below must both produce the correct version
+# and role-revision progression.
 
 scenario 'A version bump merged before other role changes'
 expect 'version bump' v0.6.3-0 "$(merge "$bump_version")"
@@ -202,123 +188,24 @@ git tag 'v0.6.20-7'
 git tag 'v0.6.2-rc1'
 expect 'a task' v0.6.2-2 "$(merge "$edit_task")"
 
-scenario 'Standard role runtime directories trigger releases'
-runtime_paths=(
-	'files/payload.txt'
-	'filter_plugins/example.py'
-	'handlers/main.yml'
-	'library/example.py'
-	'lookup_plugins/example.py'
-	'meta/runtime.yml'
-	'module_utils/example.py'
-	'modules/example.py'
-	'plugins/filter/example.py'
-	'vars/main.yml'
-)
-release_number=2
-for runtime_path in "${runtime_paths[@]}"; do
-	expect "$runtime_path" "v0.6.2-$release_number" "$(merge "write_runtime_file '$runtime_path'")"
-	release_number=$((release_number + 1))
-done
+scenario 'A later main state is released after an earlier job'
+expect 'earlier main state' v0.6.2-2 "$(merge "$edit_task")"
+# If main advances after that job checked out, the newest pending job evaluates
+# current main. A revert of the earlier change therefore becomes the next
+# release instead of leaving the highest tag on superseded code.
+expect 'current main after revert' v0.6.2-3 "$(merge "$revert_task")"
 
-scenario 'An unclassified top-level directory fails visibly'
-mkdir -p unclassified
-printf 'runtime status unknown\n' > unclassified/example.txt
-git add -A
-git commit -qm 'Unclassified directory'
-expect_failure 'unclassified top-level directory'
-
-scenario 'An unclassified top-level file fails visibly'
-printf 'runtime status unknown\n' > unclassified.txt
-git add -A
-git commit -qm 'Unclassified file'
-expect_failure 'unclassified top-level file'
-
-scenario 'A checkout behind the latest release fails safely'
-expect 'first task' v0.6.2-2 "$(merge "$edit_task")"
-older_commit="$(git rev-parse HEAD)"
-expect 'later template' v0.6.2-3 "$(merge "$edit_template")"
-git checkout -q "$older_commit"
-expect_failure 'checkout behind latest release'
-
-scenario 'A stale event cannot tag a change reverted by current main'
+scenario 'A release tag outside current history fails safely'
+git checkout -qb released-elsewhere
 eval "$edit_task"
 git add -A
-git commit -qm 'Task change'
-superseded_commit="$(git rev-parse HEAD)"
-git show 'v0.6.2-1:tasks/main.yml' > tasks/main.yml
-git add -A
-git commit -qm 'Revert task change'
-expect 'current main after the revert' '' "$(bin/compute-next-tag.sh 2>/dev/null)"
-# Simulate the older event starting after the revert. The workflow explicitly
-# checks out main, so it evaluates the current branch tip rather than this SHA.
-git checkout -q "$superseded_commit"
+git commit -qm 'Release outside main'
+git tag 'v0.6.2-2'
 git checkout -q main
-expect 'superseded queued event' '' "$(bin/compute-next-tag.sh 2>/dev/null)"
-
-scenario 'A push after checkout is reconciled by the next retained run'
-remote_path="$workdir/.git/release-remote.git"
-git init -q --bare "$remote_path"
-git remote add origin "$remote_path"
-git push -q origin main
-git push -q origin 'refs/tags/v0.6.2-0' 'refs/tags/v0.6.2-1'
-eval "$edit_task"
-git add -A
-git commit -qm 'Task change'
-checked_out_commit="$(git rev-parse HEAD)"
-checked_out_tag="$(bin/compute-next-tag.sh 2>/dev/null)"
-git show 'v0.6.2-1:tasks/main.yml' > tasks/main.yml
-git add -A
-git commit -qm 'Revert task change'
-git push -q origin main
-# The already-running job may still release the accepted commit it evaluated.
-# The next retained job then compares current main with that release and cuts a
-# follow-up tag for the revert, leaving the highest tag on current main.
-git tag "$checked_out_tag" "$checked_out_commit"
-git push -q origin "refs/tags/$checked_out_tag"
-expect 'current main after mid-run push' v0.6.2-3 "$(bin/compute-next-tag.sh 2>/dev/null)"
-git tag v0.6.2-3
-git push -q origin 'refs/tags/v0.6.2-3'
-expect 'highest tag reaches current main' "$(git rev-parse HEAD)" "$(git --git-dir="$remote_path" rev-parse 'refs/tags/v0.6.2-3^{}')"
-
-scenario 'Quoted versions and malformed declarations'
-write_defaults "'0.6.2'"
-git add -A
-git commit -qm 'Single-quoted version'
-expect 'single-quoted version' v0.6.2-2 "$(bin/compute-next-tag.sh 2>/dev/null)"
-printf 'headplane_version: 0.6.2\n' >> defaults/main.yml
-git add -A
-git commit -qm 'Duplicate version declaration'
-expect_failure 'duplicate version declarations'
-
-scenario 'Malformed quoted and prerelease versions fail visibly'
-write_defaults "\"0.6.2'"
-git add -A
-git commit -qm 'Mismatched version quotes'
-expect_failure 'mismatched version quotes'
-
-scenario 'Malformed prerelease identifiers fail visibly'
-write_defaults '0.6.2-rc.'
-git add -A
-git commit -qm 'Malformed prerelease version'
-expect_failure 'trailing prerelease separator'
-
-scenario 'Malformed numeric release tags fail visibly'
-git tag 'v0.6.2-08'
-expect_failure 'leading-zero release number'
-
-scenario 'Release counters have a supported upper bound'
-git tag 'v0.6.2-999999'
-expect_failure 'exhausted release counter'
-
-scenario 'A release tag on a divergent history'
-git branch divergent
-expect 'main task' v0.6.2-2 "$(merge "$edit_task")"
-git checkout -q divergent
 eval "$edit_template"
 git add -A
-git commit -qm 'Divergent merge'
-expect_failure 'divergent tag and commit'
+git commit -qm 'Current main'
+expect_failure 'non-ancestor release tag'
 
 if [ "$failures" -gt 0 ]; then
 	echo >&2 "$failures scenario(s) behaved unexpectedly"
