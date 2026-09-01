@@ -25,8 +25,8 @@ jobs:
     if: ${{ !github.event.repository.fork && github.ref == 'refs/heads/main' }}
 
     # Tag numbers are derived from existing tags, so runs must not compute them
-    # simultaneously. Keep pending runs for evaluation, while the tag script
-    # safely skips an older commit that a later release already includes.
+    # simultaneously. Keep pending runs for evaluation; each run checks current
+    # main so an older event cannot tag code that a newer commit superseded.
     concurrency:
       group: autotag
       cancel-in-progress: false
@@ -38,6 +38,9 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          # Concurrency groups do not guarantee dispatch order. Always evaluate
+          # the current release state instead of this run's triggering commit.
+          ref: main
 
       - name: Determine the next tag
         id: tag

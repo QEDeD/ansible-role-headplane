@@ -32,11 +32,64 @@ defaults_path='defaults/main.yml'
 # does not change what a playbook run does, and releasing it would only create
 # churn in the repositories that consume this role.
 role_defining_paths=(
+	'action_plugins'
+	'become_plugins'
+	'cache_plugins'
+	'callback_plugins'
+	'cliconf_plugins'
+	'connection_plugins'
 	'defaults'
+	'files'
+	'filter_plugins'
+	'handlers'
+	'httpapi_plugins'
+	'inventory_plugins'
+	'library'
+	'lookup_plugins'
 	'meta'
+	'modules'
+	'module_utils'
+	'netconf_plugins'
+	'plugins'
+	'shell_plugins'
+	'strategy_plugins'
 	'tasks'
 	'templates'
+	'test_plugins'
+	'vars'
 )
+
+# Known repository-only directories that do not change the installed role.
+# Failing on an unclassified directory makes future role structure changes an
+# explicit release-policy decision instead of silently omitting them.
+non_role_top_level_paths=(
+	'.github'
+	'LICENSES'
+	'bin'
+	'docs'
+	'molecule'
+	'tests'
+)
+
+is_known_top_level_path() {
+	local candidate="$1" known_path
+
+	for known_path in "${role_defining_paths[@]}" "${non_role_top_level_paths[@]}"; do
+		if [ "$candidate" = "$known_path" ]; then
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+while IFS= read -r top_level_path; do
+	if ! is_known_top_level_path "$top_level_path"; then
+		echo >&2 "Unclassified top-level directory: $top_level_path"
+		echo >&2 'Classify it as role-defining or repository-only before releasing'
+		exit 1
+	fi
+done < <(git ls-tree -d --name-only HEAD)
 
 version="$(sed -nE 's|^headplane_version:[[:space:]]*"?([^"[:space:]]+)"?.*$|\1|p' "$defaults_path" | head -n1)"
 
@@ -50,6 +103,9 @@ fi
 # working if the value ever starts carrying one.
 tag_prefix="v${version#v}-"
 
+# Release tags are immutable history. Deleting one makes its revision number
+# ambiguous and is intentionally not repaired by this workflow.
+#
 # Of all releases of this version, the highest release number. Sorted
 # numerically, so that -10 is recognized as newer than -9.
 last_release="$(git tag --list "${tag_prefix}*" | sed -e "s|^${tag_prefix}||" | grep -E '^[0-9]+$' | sort -n | tail -n1 || true)"
@@ -62,9 +118,9 @@ fi
 
 previous_tag="${tag_prefix}${last_release}"
 
-# Runs in a concurrency group are not guaranteed to execute in dispatch order.
-# A stale run needs no release when a later tagged commit already contains it;
-# divergent history is unexpected and must be investigated instead.
+# The workflow evaluates current main, not its triggering commit. This ancestry
+# check is an additional guard against an unexpected stale checkout or moved
+# tag; divergent history must be investigated instead of tagged automatically.
 if git merge-base --is-ancestor "$previous_tag" HEAD; then
 	:
 elif git merge-base --is-ancestor HEAD "$previous_tag"; then

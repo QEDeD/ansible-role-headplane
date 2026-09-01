@@ -15,9 +15,22 @@
 set -euo pipefail
 
 script_under_test="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/compute-next-tag.sh"
+workflow_under_test="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/.github/workflows/autotag.yml"
 
 failures=0
 workdir=''
+
+if awk '
+	/actions\/checkout@/ { in_checkout = 1; next }
+	in_checkout && /^[[:space:]]+ref:[[:space:]]+main([[:space:]]|$)/ { found = 1 }
+	in_checkout && /^[[:space:]]+- name:/ { in_checkout = 0 }
+	END { exit(found ? 0 : 1) }
+' "$workflow_under_test"; then
+	echo '  ok   | workflow evaluates current main'
+else
+	echo '  FAIL | checkout step does not explicitly evaluate current main'
+	failures=$((failures + 1))
+fi
 
 cleanup() {
 	cd /
@@ -127,6 +140,13 @@ edit_template="printf 'a line\n' >> templates/env.j2"
 edit_readme="printf 'documentation\n' >> README.md"
 edit_script="printf '# a comment\n' >> bin/compute-next-tag.sh"
 
+write_runtime_file() {
+	local path="$1"
+
+	mkdir -p "$(dirname -- "$path")"
+	printf 'runtime content\n' >> "$path"
+}
+
 # The two merge orders below apply the same updates and must each end up with
 # every update released exactly once, whichever order they arrive in.
 
@@ -167,12 +187,53 @@ git tag 'v0.6.20-7'
 git tag 'v0.6.2-rc1'
 expect 'a task' v0.6.2-2 "$(merge "$edit_task")"
 
+scenario 'Standard role runtime directories trigger releases'
+runtime_paths=(
+	'files/payload.txt'
+	'filter_plugins/example.py'
+	'handlers/main.yml'
+	'library/example.py'
+	'lookup_plugins/example.py'
+	'meta/runtime.yml'
+	'module_utils/example.py'
+	'modules/example.py'
+	'plugins/filter/example.py'
+	'vars/main.yml'
+)
+release_number=2
+for runtime_path in "${runtime_paths[@]}"; do
+	expect "$runtime_path" "v0.6.2-$release_number" "$(merge "write_runtime_file '$runtime_path'")"
+	release_number=$((release_number + 1))
+done
+
+scenario 'An unclassified top-level directory fails visibly'
+mkdir -p unclassified
+printf 'runtime status unknown\n' > unclassified/example.txt
+git add -A
+git commit -qm 'Unclassified directory'
+expect_failure 'unclassified top-level directory'
+
 scenario 'A stale queued run after a later commit has been released'
 expect 'first task' v0.6.2-2 "$(merge "$edit_task")"
 older_commit="$(git rev-parse HEAD)"
 expect 'later template' v0.6.2-3 "$(merge "$edit_template")"
 git checkout -q "$older_commit"
 expect 'stale task run' '' "$(bin/compute-next-tag.sh 2>/dev/null)"
+
+scenario 'A stale event cannot tag a change reverted by current main'
+eval "$edit_task"
+git add -A
+git commit -qm 'Task change'
+superseded_commit="$(git rev-parse HEAD)"
+git show 'v0.6.2-1:tasks/main.yml' > tasks/main.yml
+git add -A
+git commit -qm 'Revert task change'
+expect 'current main after the revert' '' "$(bin/compute-next-tag.sh 2>/dev/null)"
+# Simulate the older event starting after the revert. The workflow explicitly
+# checks out main, so it evaluates the current branch tip rather than this SHA.
+git checkout -q "$superseded_commit"
+git checkout -q main
+expect 'superseded queued event' '' "$(bin/compute-next-tag.sh 2>/dev/null)"
 
 scenario 'A release tag on a divergent history'
 git branch divergent
