@@ -10,8 +10,6 @@ This is an [Ansible](https://www.ansible.com/) role which installs [Headplane](h
 
 ## Requirements
 
-Headplane and Headscale compatibility requirements can change between releases. The [Headplane release notes](https://github.com/tale/headplane/releases) and, for agent users, the [agent prerequisites](https://headplane.net/features/agent) provide the relevant compatibility information.
-
 This role *implicitly* depends on:
 
 - [`com.devture.ansible.role.playbook_help`](https://github.com/devture/com.devture.ansible.role.playbook_help)
