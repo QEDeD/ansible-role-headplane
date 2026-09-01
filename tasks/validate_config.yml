@@ -4,6 +4,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 ---
+- name: (Deprecation) Catch and report unsupported Headplane agent pre-auth key setting
+  ansible.builtin.fail:
+    msg: >-
+      `headplane_config_integration_agent_pre_authkey` is no longer supported for Headplane 0.7.
+      Headplane 0.7's agent uses `headscale.api_key` and creates its own short-lived pre-auth keys.
+      Create or provide a Headscale API key and configure it via `headplane_config_headscale_api_key`.
+      The old pre-auth key is a different credential type and must not be copied into the new variable.
+  when: "lookup('ansible.builtin.varnames', '^headplane_config_integration_agent_pre_authkey$', wantlist=True) | length > 0"
+
 - name: (Deprecation) Catch and report renamed settings
   ansible.builtin.fail:
     msg: >-
@@ -25,6 +34,15 @@
     - headplane_cookie_secret
     - headplane_headscale_hostname
     - headplane_headscale_port
+
+- name: Fail if Headplane agent integration is enabled without a Headscale API key
+  ansible.builtin.fail:
+    msg: >-
+      You need to define `headplane_config_headscale_api_key` with a Headscale API key
+      when `headplane_config_integration_agent_enabled` is enabled.
+  when:
+    - headplane_config_integration_agent_enabled | bool
+    - headplane_config_headscale_api_key | string | length == 0
 
 - name: Fail if Headplane architecture is not supported
   ansible.builtin.fail:
