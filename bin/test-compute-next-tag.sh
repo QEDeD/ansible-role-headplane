@@ -33,12 +33,19 @@ expect_workflow_contract() {
 
 expect_workflow_contract 'evaluates current main' '^[[:space:]]+ref:[[:space:]]+main([[:space:]]|$)'
 expect_workflow_contract 'fetches complete history and tags' '^[[:space:]]+fetch-depth:[[:space:]]+0([[:space:]]|$)'
-expect_workflow_contract 'retains all queued runs' '^[[:space:]]+queue:[[:space:]]+max([[:space:]]|$)'
+expect_workflow_contract 'uses the maximum pending queue' '^[[:space:]]+queue:[[:space:]]+max([[:space:]]|$)'
 expect_workflow_contract 'does not cancel a running release' '^[[:space:]]+cancel-in-progress:[[:space:]]+false([[:space:]]|$)'
 expect_workflow_contract 'has tag-write permission' '^[[:space:]]+contents:[[:space:]]+write([[:space:]]|$)'
 expect_workflow_contract 'rejects fork release jobs' '!github[.]event[.]repository[.]fork'
 expect_workflow_contract 'limits release jobs to main' "github[.]ref == 'refs/heads/main'"
 expect_workflow_contract 'pushes only the computed tag ref' 'git push origin "refs/tags/[$]TAG"'
+
+if "$script_under_test" >/dev/null 2>&1; then
+	echo '  ok   | actual repository tree is fully classified'
+else
+	echo '  FAIL | actual repository tree or release state is invalid'
+	failures=$((failures + 1))
+fi
 
 cleanup() {
 	cd /
@@ -227,12 +234,12 @@ git add -A
 git commit -qm 'Unclassified file'
 expect_failure 'unclassified top-level file'
 
-scenario 'A stale queued run after a later commit has been released'
+scenario 'A checkout behind the latest release fails safely'
 expect 'first task' v0.6.2-2 "$(merge "$edit_task")"
 older_commit="$(git rev-parse HEAD)"
 expect 'later template' v0.6.2-3 "$(merge "$edit_template")"
 git checkout -q "$older_commit"
-expect 'stale task run' '' "$(bin/compute-next-tag.sh 2>/dev/null)"
+expect_failure 'checkout behind latest release'
 
 scenario 'A stale event cannot tag a change reverted by current main'
 eval "$edit_task"
@@ -283,6 +290,18 @@ printf 'headplane_version: 0.6.2\n' >> defaults/main.yml
 git add -A
 git commit -qm 'Duplicate version declaration'
 expect_failure 'duplicate version declarations'
+
+scenario 'Malformed quoted and prerelease versions fail visibly'
+write_defaults "\"0.6.2'"
+git add -A
+git commit -qm 'Mismatched version quotes'
+expect_failure 'mismatched version quotes'
+
+scenario 'Malformed prerelease identifiers fail visibly'
+write_defaults '0.6.2-rc.'
+git add -A
+git commit -qm 'Malformed prerelease version'
+expect_failure 'trailing prerelease separator'
 
 scenario 'Malformed numeric release tags fail visibly'
 git tag 'v0.6.2-08'

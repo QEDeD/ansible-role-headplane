@@ -119,7 +119,7 @@ case "$version" in
 		;;
 esac
 
-if [[ ! "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+if [[ ! "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
 	echo >&2 "Unsupported Headplane version in $defaults_path: $version"
 	exit 1
 fi
@@ -171,14 +171,14 @@ if [ "$last_release" -ge "$maximum_release" ]; then
 	exit 1
 fi
 
-# The workflow evaluates current main, not its triggering commit. This ancestry
-# check is an additional guard against an unexpected stale checkout or moved
-# tag; divergent history must be investigated instead of tagged automatically.
+# The workflow evaluates current main, not its triggering commit, and expects
+# main plus release tags to be append-only. A rewind, moved tag, stale checkout,
+# or divergent history must be investigated instead of handled automatically.
 if git merge-base --is-ancestor "$previous_tag" HEAD; then
 	:
 elif git merge-base --is-ancestor HEAD "$previous_tag"; then
-	echo >&2 "Current commit is already included in later release $previous_tag"
-	exit 0
+	echo >&2 "Current commit is behind later release $previous_tag"
+	exit 1
 else
 	echo >&2 "$previous_tag and the current commit have diverged"
 	exit 1

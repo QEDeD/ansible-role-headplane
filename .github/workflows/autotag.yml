@@ -26,7 +26,7 @@ jobs:
 
     # Tag numbers are derived from existing tags, so runs must not compute them
     # simultaneously. Each retained run evaluates current main at checkout; if
-    # main advances afterward, a later retained run reconciles the new state.
+    # append-only main advances afterward, a later retained run reconciles it.
     concurrency:
       group: autotag
       cancel-in-progress: false
