@@ -59,14 +59,25 @@ role_defining_paths=(
 	'vars'
 )
 
-# Known repository-only directories that do not change the installed role.
-# Failing on an unclassified directory makes future role structure changes an
+# Known repository-only entries that do not change the installed role. They
+# must remain repository-only; using one as runtime input requires reclassifying
+# it. Failing on any unclassified entry makes future structure changes an
 # explicit release-policy decision instead of silently omitting them.
-non_role_top_level_paths=(
+repository_only_top_level_paths=(
+	'.ansible-lint'
 	'.github'
+	'.gitignore'
+	'.pre-commit-config.yaml'
+	'.python-version'
+	'.yamllint.yml'
+	'LICENSE'
 	'LICENSES'
+	'REUSE.toml'
+	'README.md'
 	'bin'
 	'docs'
+	'justfile'
+	'mise.toml'
 	'molecule'
 	'tests'
 )
@@ -74,7 +85,7 @@ non_role_top_level_paths=(
 is_known_top_level_path() {
 	local candidate="$1" known_path
 
-	for known_path in "${role_defining_paths[@]}" "${non_role_top_level_paths[@]}"; do
+	for known_path in "${role_defining_paths[@]}" "${repository_only_top_level_paths[@]}"; do
 		if [ "$candidate" = "$known_path" ]; then
 			return 0
 		fi
@@ -85,16 +96,31 @@ is_known_top_level_path() {
 
 while IFS= read -r top_level_path; do
 	if ! is_known_top_level_path "$top_level_path"; then
-		echo >&2 "Unclassified top-level directory: $top_level_path"
+		echo >&2 "Unclassified top-level entry: $top_level_path"
 		echo >&2 'Classify it as role-defining or repository-only before releasing'
 		exit 1
 	fi
-done < <(git ls-tree -d --name-only HEAD)
+done < <(git ls-tree --name-only HEAD)
 
-version="$(sed -nE 's|^headplane_version:[[:space:]]*"?([^"[:space:]]+)"?.*$|\1|p' "$defaults_path" | head -n1)"
+mapfile -t version_declarations < <(grep -E '^headplane_version:' "$defaults_path" || true)
 
-if [ -z "$version" ]; then
-	echo >&2 "Could not determine the Headplane version from $defaults_path"
+if [ "${#version_declarations[@]}" -ne 1 ]; then
+	echo >&2 "Expected exactly one headplane_version declaration in $defaults_path"
+	exit 1
+fi
+
+version="${version_declarations[0]#*:}"
+version="${version#"${version%%[![:space:]]*}"}"
+version="${version%"${version##*[![:space:]]}"}"
+
+case "$version" in
+	\"*\" | \'*\')
+		version="${version:1:${#version}-2}"
+		;;
+esac
+
+if [[ ! "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+	echo >&2 "Unsupported Headplane version in $defaults_path: $version"
 	exit 1
 fi
 
@@ -103,12 +129,34 @@ fi
 # working if the value ever starts carrying one.
 tag_prefix="v${version#v}-"
 
-# Release tags are immutable history. Deleting one makes its revision number
-# ambiguous and is intentionally not repaired by this workflow.
+# Release tags are immutable, workflow-owned history. Deleting one makes its
+# revision number ambiguous, and another tag writer is outside the concurrency
+# lock; neither case is intentionally repaired by this workflow.
 #
-# Of all releases of this version, the highest release number. Sorted
-# numerically, so that -10 is recognized as newer than -9.
-last_release="$(git tag --list "${tag_prefix}*" | sed -e "s|^${tag_prefix}||" | grep -E '^[0-9]+$' | sort -n | tail -n1 || true)"
+# Track the highest canonical numeric release of this version, so that -10 is
+# recognized as newer than -9 without relying on lexical sorting.
+maximum_release=999999
+last_release=''
+
+while IFS= read -r release_tag; do
+	release_number="${release_tag#"$tag_prefix"}"
+
+	# Ignore tags such as `v0.7.1-rc1`; they are outside the numeric release
+	# namespace owned by this workflow.
+	if [[ ! "$release_number" =~ ^[0-9]+$ ]]; then
+		continue
+	fi
+
+	if [[ ! "$release_number" =~ ^(0|[1-9][0-9]*)$ ]] || [ "${#release_number}" -gt 6 ] || [ "$((10#$release_number))" -gt "$maximum_release" ]; then
+		echo >&2 "Unsupported release number in tag: $release_tag"
+		exit 1
+	fi
+
+	release_number="$((10#$release_number))"
+	if [ -z "$last_release" ] || [ "$release_number" -gt "$last_release" ]; then
+		last_release="$release_number"
+	fi
+done < <(git tag --list "${tag_prefix}*")
 
 if [ -z "$last_release" ]; then
 	echo >&2 "Version $version has never been released"
@@ -117,6 +165,11 @@ if [ -z "$last_release" ]; then
 fi
 
 previous_tag="${tag_prefix}${last_release}"
+
+if [ "$last_release" -ge "$maximum_release" ]; then
+	echo >&2 "Release number limit reached for version $version"
+	exit 1
+fi
 
 # The workflow evaluates current main, not its triggering commit. This ancestry
 # check is an additional guard against an unexpected stale checkout or moved

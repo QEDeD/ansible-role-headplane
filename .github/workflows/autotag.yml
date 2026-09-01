@@ -25,8 +25,8 @@ jobs:
     if: ${{ !github.event.repository.fork && github.ref == 'refs/heads/main' }}
 
     # Tag numbers are derived from existing tags, so runs must not compute them
-    # simultaneously. Keep pending runs for evaluation; each run checks current
-    # main so an older event cannot tag code that a newer commit superseded.
+    # simultaneously. Each retained run evaluates current main at checkout; if
+    # main advances afterward, a later retained run reconciles the new state.
     concurrency:
       group: autotag
       cancel-in-progress: false

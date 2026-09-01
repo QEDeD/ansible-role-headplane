@@ -20,17 +20,25 @@ workflow_under_test="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/.git
 failures=0
 workdir=''
 
-if awk '
-	/actions\/checkout@/ { in_checkout = 1; next }
-	in_checkout && /^[[:space:]]+ref:[[:space:]]+main([[:space:]]|$)/ { found = 1 }
-	in_checkout && /^[[:space:]]+- name:/ { in_checkout = 0 }
-	END { exit(found ? 0 : 1) }
-' "$workflow_under_test"; then
-	echo '  ok   | workflow evaluates current main'
-else
-	echo '  FAIL | checkout step does not explicitly evaluate current main'
-	failures=$((failures + 1))
-fi
+expect_workflow_contract() {
+	local description="$1" pattern="$2"
+
+	if grep -Eq "$pattern" "$workflow_under_test"; then
+		printf '  ok   | workflow %s\n' "$description"
+	else
+		printf '  FAIL | workflow does not %s\n' "$description"
+		failures=$((failures + 1))
+	fi
+}
+
+expect_workflow_contract 'evaluates current main' '^[[:space:]]+ref:[[:space:]]+main([[:space:]]|$)'
+expect_workflow_contract 'fetches complete history and tags' '^[[:space:]]+fetch-depth:[[:space:]]+0([[:space:]]|$)'
+expect_workflow_contract 'retains all queued runs' '^[[:space:]]+queue:[[:space:]]+max([[:space:]]|$)'
+expect_workflow_contract 'does not cancel a running release' '^[[:space:]]+cancel-in-progress:[[:space:]]+false([[:space:]]|$)'
+expect_workflow_contract 'has tag-write permission' '^[[:space:]]+contents:[[:space:]]+write([[:space:]]|$)'
+expect_workflow_contract 'rejects fork release jobs' '!github[.]event[.]repository[.]fork'
+expect_workflow_contract 'limits release jobs to main' "github[.]ref == 'refs/heads/main'"
+expect_workflow_contract 'pushes only the computed tag ref' 'git push origin "refs/tags/[$]TAG"'
 
 cleanup() {
 	cd /
@@ -213,6 +221,12 @@ git add -A
 git commit -qm 'Unclassified directory'
 expect_failure 'unclassified top-level directory'
 
+scenario 'An unclassified top-level file fails visibly'
+printf 'runtime status unknown\n' > unclassified.txt
+git add -A
+git commit -qm 'Unclassified file'
+expect_failure 'unclassified top-level file'
+
 scenario 'A stale queued run after a later commit has been released'
 expect 'first task' v0.6.2-2 "$(merge "$edit_task")"
 older_commit="$(git rev-parse HEAD)"
@@ -234,6 +248,49 @@ expect 'current main after the revert' '' "$(bin/compute-next-tag.sh 2>/dev/null
 git checkout -q "$superseded_commit"
 git checkout -q main
 expect 'superseded queued event' '' "$(bin/compute-next-tag.sh 2>/dev/null)"
+
+scenario 'A push after checkout is reconciled by the next retained run'
+remote_path="$workdir/.git/release-remote.git"
+git init -q --bare "$remote_path"
+git remote add origin "$remote_path"
+git push -q origin main
+git push -q origin 'refs/tags/v0.6.2-0' 'refs/tags/v0.6.2-1'
+eval "$edit_task"
+git add -A
+git commit -qm 'Task change'
+checked_out_commit="$(git rev-parse HEAD)"
+checked_out_tag="$(bin/compute-next-tag.sh 2>/dev/null)"
+git show 'v0.6.2-1:tasks/main.yml' > tasks/main.yml
+git add -A
+git commit -qm 'Revert task change'
+git push -q origin main
+# The already-running job may still release the accepted commit it evaluated.
+# The next retained job then compares current main with that release and cuts a
+# follow-up tag for the revert, leaving the highest tag on current main.
+git tag "$checked_out_tag" "$checked_out_commit"
+git push -q origin "refs/tags/$checked_out_tag"
+expect 'current main after mid-run push' v0.6.2-3 "$(bin/compute-next-tag.sh 2>/dev/null)"
+git tag v0.6.2-3
+git push -q origin 'refs/tags/v0.6.2-3'
+expect 'highest tag reaches current main' "$(git rev-parse HEAD)" "$(git --git-dir="$remote_path" rev-parse 'refs/tags/v0.6.2-3^{}')"
+
+scenario 'Quoted versions and malformed declarations'
+write_defaults "'0.6.2'"
+git add -A
+git commit -qm 'Single-quoted version'
+expect 'single-quoted version' v0.6.2-2 "$(bin/compute-next-tag.sh 2>/dev/null)"
+printf 'headplane_version: 0.6.2\n' >> defaults/main.yml
+git add -A
+git commit -qm 'Duplicate version declaration'
+expect_failure 'duplicate version declarations'
+
+scenario 'Malformed numeric release tags fail visibly'
+git tag 'v0.6.2-08'
+expect_failure 'leading-zero release number'
+
+scenario 'Release counters have a supported upper bound'
+git tag 'v0.6.2-999999'
+expect_failure 'exhausted release counter'
 
 scenario 'A release tag on a divergent history'
 git branch divergent
