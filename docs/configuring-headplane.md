@@ -14,7 +14,7 @@ Headplane and Headscale have version-specific compatibility requirements. See th
 
 ## Enabling the Headplane agent
 
-The optional Headplane agent periodically syncs information about the nodes in your Tailnet. It is disabled by default and requires a Headscale API key when enabled:
+The optional Headplane agent periodically syncs information about the nodes in your Tailnet. It is disabled by default and requires a Headscale API key when enabled. If Headplane already uses one, you can reuse the same key. Otherwise, create one as described in [Headscale's API documentation](https://headscale.net/stable/ref/api/):
 
 ```yaml
 headplane_config_integration_agent_enabled: true
