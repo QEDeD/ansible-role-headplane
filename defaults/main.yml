@@ -25,7 +25,7 @@ headplane_gid: ""
 headplane_version: 0.7.1
 headplane_arch: amd64
 
-# The browser-facing scheme at which Headplane is served.
+# The scheme used for serving Headplane.
 headplane_scheme: https
 
 # The hostname at which headplane is served.
