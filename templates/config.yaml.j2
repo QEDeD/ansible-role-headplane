@@ -15,7 +15,7 @@ server:
   # Should the cookies only work over HTTPS?
   # Set to false if running via HTTP without a proxy
   # (I recommend this is true in production)
-  cookie_secure: true
+  cookie_secure: {{ headplane_config_server_cookie_secure | to_json }}
 
   # The path to persist Headplane specific data. All data going forward
   # is stored in this directory, including the internal database and

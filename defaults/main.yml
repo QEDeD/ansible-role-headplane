@@ -25,12 +25,19 @@ headplane_gid: ""
 headplane_version: 0.7.1
 headplane_arch: amd64
 
+# The browser-facing scheme at which Headplane is served.
+headplane_scheme: https
+
 # The hostname at which headplane is served.
 headplane_hostname: ""
 
 # The public URL of Headplane, used to construct OIDC callback URLs.
 # Do not include the dashboard prefix (/admin).
-headplane_config_server_base_url: "https://{{ headplane_hostname }}"
+headplane_config_server_base_url: "{{ headplane_scheme }}://{{ headplane_hostname }}"
+
+# Whether session cookies require HTTPS, based on the browser-facing URL.
+# TLS termination at a reverse proxy still uses secure cookies for an HTTPS URL.
+headplane_config_server_cookie_secure: "{{ (headplane_config_server_base_url | urlsplit('scheme')) != 'http' }}"
 
 # The path at which headplane is served.
 # This value must either be `/` or not end with a slash (e.g. `/headplane`).
