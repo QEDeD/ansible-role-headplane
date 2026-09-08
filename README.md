@@ -17,6 +17,18 @@ Check [`defaults/main.yml`](defaults/main.yml) for the full list of supported op
 
 💡 For an Ansible playbook which integrates this role and makes it easier to use, see the [Mother-of-All-Self-Hosting Ansible playbook](https://github.com/mother-of-all-self-hosting/mash-playbook).
 
+## Public URL
+
+Headplane 0.7 uses `server.base_url` to construct OIDC login callback URLs. The role sets it to `https://{{ headplane_hostname }}` by default.
+
+To use a different public URL, override `headplane_config_server_base_url`, for example:
+
+```yaml
+headplane_config_server_base_url: "https://headplane.example.com:8443"
+```
+
+Use Headplane's public URL without the dashboard prefix (`/admin`). An existing `server.base_url` setting in `headplane_configuration_extension_yaml` continues to override the default.
+
 ## Development
 
 ### pre-commit

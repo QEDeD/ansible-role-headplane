@@ -6,6 +6,7 @@
 server:
   host: "0.0.0.0"
   port: {{ headplane_container_http_port }}
+  base_url: {{ headplane_config_server_base_url | to_json }}
 
   # The secret used to encode and decode web sessions
   # Ensure that this is exactly 32 characters long
