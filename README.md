@@ -17,24 +17,6 @@ Check [`defaults/main.yml`](defaults/main.yml) for the full list of supported op
 
 💡 For an Ansible playbook which integrates this role and makes it easier to use, see the [Mother-of-All-Self-Hosting Ansible playbook](https://github.com/mother-of-all-self-hosting/mash-playbook).
 
-## Public URL
-
-Headplane 0.7 uses `server.base_url` to construct OIDC login callback URLs. The role sets it to `https://{{ headplane_hostname }}` by default.
-
-To use a different public URL, override `headplane_config_server_base_url`, for example:
-
-```yaml
-headplane_config_server_base_url: "https://headplane.example.com:8443"
-```
-
-For example, if you open the dashboard at `https://headplane.example.com/admin`, set the base URL to `https://headplane.example.com`. Headplane constructs the login callback URL as `https://headplane.example.com/admin/oidc/callback`.
-
-An existing `server.base_url` setting in `headplane_configuration_extension_yaml` continues to override the role variable. If you set `HEADPLANE_SERVER__BASE_URL` through `headplane_environment_variables_additional_variables`, update or remove it when changing the public URL. Headplane applies environment variables after its YAML configuration, so this setting overrides both the role variable and configuration extension.
-
-The standard Headplane image builds callbacks at `/admin/oidc/callback`. Adding a path to `server.base_url` does not relocate that route; deployments beneath an additional URL prefix need matching application and proxy routing.
-
-When upgrading from Headplane 0.6, note that Headplane 0.7 no longer derives the OIDC callback URL from `oidc.redirect_uri` or request headers. If you used `oidc.redirect_uri` to select a different public origin, set `headplane_config_server_base_url` to that origin instead, without the dashboard or callback path.
-
 ## Development
 
 ### pre-commit
