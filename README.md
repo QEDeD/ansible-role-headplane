@@ -29,6 +29,8 @@ headplane_config_server_base_url: "https://headplane.example.com:8443"
 
 Use Headplane's public URL without the dashboard prefix (`/admin`). An existing `server.base_url` setting in `headplane_configuration_extension_yaml` continues to override the default.
 
+When upgrading from Headplane 0.6, note that Headplane 0.7 no longer derives the OIDC callback URL from `oidc.redirect_uri` or request headers. If you used `oidc.redirect_uri` to select a different public origin, set `headplane_config_server_base_url` to that origin instead, without the dashboard or callback path.
+
 ## Development
 
 ### pre-commit
